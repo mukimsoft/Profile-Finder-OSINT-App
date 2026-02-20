@@ -21,15 +21,28 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#020617"
       },
-      "package": "com.mukim.profilefinder"
+      "package": "com.mukim.profilefinder",
+      "permissions": [
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
+    "plugins": [
+      "expo-font",
+      "expo-image-picker"
+    ],
     "extra": {
       "eas": {
         "projectId": "58d25d39-49a5-4255-b6b2-09a4ee8c987a"
       }
-    }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
   }
 }
