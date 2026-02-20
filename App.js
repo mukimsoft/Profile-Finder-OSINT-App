@@ -9,257 +9,216 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const PLATFORMS = [
-  { id: '0', name: 'None', icon: 'ban', color: '#64748b' },
-  { id: '1', name: 'GitHub', icon: 'github', color: '#fff' },
-  { id: '2', name: 'Facebook', icon: 'facebook', color: '#1877F2' },
-  { id: '3', name: 'Instagram', icon: 'instagram', color: '#E4405F' },
-  { id: '4', name: 'LinkedIn', icon: 'linkedin', color: '#0A66C2' },
-  { id: '5', name: 'Twitter', icon: 'twitter', color: '#1DA1F2' },
-  { id: '6', name: 'YouTube', icon: 'youtube', color: '#FF0000' },
+  { id: '0', name: 'None', icon: 'ban', color: '#64748b', base: '' },
+  { id: '1', name: 'GitHub', icon: 'github', color: '#fff', base: 'github.com/' },
+  { id: '2', name: 'Facebook', icon: 'facebook', color: '#1877F2', base: 'facebook.com/' },
+  { id: '3', name: 'Instagram', icon: 'instagram', color: '#E4405F', base: 'instagram.com/' },
+  { id: '4', name: 'LinkedIn', icon: 'linkedin', color: '#0A66C2', base: 'linkedin.com/in/' },
+  { id: '5', name: 'Twitter', icon: 'twitter', color: '#1DA1F2', base: 'x.com/' },
+  { id: '6', name: 'YouTube', icon: 'youtube', color: '#FF0000', base: 'youtube.com/@' },
 ];
 
 export default function App() {
   const [platform, setPlatform] = useState(PLATFORMS[0]);
   const [showModal, setShowModal] = useState(false);
-  const [type, setType] = useState('username');
+  const [type, setType] = useState('username'); 
   const [input, setInput] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState([]);
   const [saved, setSaved] = useState([]);
   const [view, setView] = useState('home');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
-      const r = await AsyncStorage.getItem('recents');
       const s = await AsyncStorage.getItem('saved');
-      if (r) setRecents(JSON.parse(r));
       if (s) setSaved(JSON.parse(s));
-    } catch (e) { console.log("Load Error", e); }
+    } catch (e) { console.log(e); }
   };
 
-  const handleSearch = async (val = input) => {
-    const searchText = val || input;
-    if (platform.name === 'None') { alert("Please select a platform!"); setShowModal(true); return; }
-    if (!searchText) return;
+  const handleSearch = async () => {
+    if (platform.id === '0') { Alert.alert("Wait", "Select a platform first!"); setShowModal(true); return; }
+    if (!input) return;
 
     Keyboard.dismiss();
     setLoading(true);
 
-    const newRecents = [searchText, ...recents.filter(i => i !== searchText)].slice(0, 5);
-    setRecents(newRecents);
-    await AsyncStorage.setItem('recents', JSON.stringify(newRecents));
-
+    const cleanUsername = input.replace('@', '').trim();
     let profileData = {
       id: Date.now().toString(),
-      username: searchText,
+      username: cleanUsername,
       platform: platform.name,
       platformIcon: platform.icon,
+      baseLink: platform.base,
       type: type,
       avatar: null,
-      bio: `${platform.name} intelligence analysis for ${searchText}`
+      bio: `Scanning ${platform.name} for ${cleanUsername}...`,
+      followers: 'Pending',
+      stats: 'Active',
+      location: null
     };
 
     if (platform.name === 'GitHub' && type === 'username') {
       try {
-        const res = await fetch(`https://api.github.com/users/${searchText}`);
+        const res = await fetch(`https://api.github.com/users/${cleanUsername}`);
         const data = await res.json();
         if (data.login) { 
           profileData.avatar = data.avatar_url; 
-          profileData.bio = data.bio || profileData.bio; 
+          profileData.bio = data.bio || "No public bio.";
+          profileData.followers = data.followers + " follower";
+          profileData.stats = data.public_repos + " Repos";
         }
       } catch (e) {}
     }
 
-    setTimeout(() => { setResult(profileData); setLoading(false); }, 700);
-  };
-
-  const saveProfile = async () => {
-    if (saved.some(s => s.username === result.username && s.platform === result.platform)) {
-      alert("Already saved!");
-      return;
-    }
-    const newSaved = [result, ...saved];
-    setSaved(newSaved);
-    await AsyncStorage.setItem('saved', JSON.stringify(newSaved));
-    alert("Profile Saved!");
-  };
-
-  const deleteSaved = (id) => {
-    Alert.alert("Delete", "Remove this profile?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-          const filtered = saved.filter(item => item.id !== id);
-          setSaved(filtered);
-          await AsyncStorage.setItem('saved', JSON.stringify(filtered));
-        }
-      }
-    ]);
-  };
-
-  const deleteRecent = async (item) => {
-    const filtered = recents.filter(i => i !== item);
-    setRecents(filtered);
-    await AsyncStorage.setItem('recents', JSON.stringify(filtered));
+    setTimeout(() => { setResult(profileData); setLoading(false); }, 800);
   };
 
   const openLink = (item) => {
-    let url = item.type === 'link' ? (item.username.startsWith('http') ? item.username : `https://${item.username}`) : `https://${item.platform.toLowerCase()}.com/${item.username}`;
-    if (item.platform === 'YouTube') url = `https://youtube.com/@${item.username}`;
-    Linking.openURL(url);
+    const url = item.type === 'link' ? (item.username.startsWith('http') ? item.username : `https://${item.username}`) : `https://${item.baseLink}${item.username}`;
+    Linking.openURL(url).catch(() => Alert.alert("Error", "Broken link."));
+  };
+
+  const saveProfile = async () => {
+    const isExist = saved.some(s => s.username === result.username && s.platform === result.platform);
+    if (isExist) { Alert.alert("Exist", "Already in Vault."); return; }
+    const newSaved = [result, ...saved];
+    setSaved(newSaved);
+    await AsyncStorage.setItem('saved', JSON.stringify(newSaved));
+    Alert.alert("Success", "Intelligence Secured.");
   };
 
   return (
     <LinearGradient colors={['#020617', '#0f172a']} style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safeArea}>
         
         {result ? (
-          <View style={styles.previewContainer}>
-            <TouchableOpacity onPress={() => setResult(null)} style={styles.backCircleStandalone}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <LinearGradient colors={['#1e293b', '#0f172a']} style={styles.resultCard}>
-              <View style={styles.avatarWrap}>
-                {result.avatar ? <Image source={{ uri: result.avatar }} style={styles.avatarImg} /> : <FontAwesome5 name={result.platformIcon} size={50} color="#0ea5e9" />}
-              </View>
-              <Text style={styles.resName}>{result.username}</Text>
-              <Text style={styles.badgeText}>{result.platform}</Text>
-              <Text style={styles.resBio}>{result.bio}</Text>
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => openLink(result)}><Text style={styles.btnText}>Visit</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#334155'}]} onPress={saveProfile}><Text style={styles.btnText}>Save</Text></TouchableOpacity>
-              </View>
-            </LinearGradient>
+          /* --- RESULT CARD --- */
+          <View style={styles.flex1}>
+            <View style={styles.headerRow}>
+              <TouchableOpacity onPress={() => setResult(null)} style={styles.backCircle}>
+                <Ionicons name="chevron-back" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.cardWrapper}>
+                <LinearGradient colors={['#1e293b', '#0f172a']} style={styles.resCard}>
+                    <View style={styles.avatarCircle}>
+                        {result.avatar ? <Image source={{ uri: result.avatar }} style={styles.imgFull} /> : <FontAwesome5 name={result.platformIcon} size={40} color="#0ea5e9" />}
+                    </View>
+                    <Text style={styles.resUser}>@{result.username}</Text>
+                    <View style={styles.pBadge}>
+                        <FontAwesome5 name={result.platformIcon} size={11} color="#0ea5e9" />
+                        <Text style={styles.pBadgeTxt}>{result.platform}</Text>
+                    </View>
+                    <Text style={styles.resBio} numberOfLines={3}>{result.bio}</Text>
+                    <View style={styles.statGrid}>
+                        <View style={styles.sItem}><Text style={styles.sLabel}>STATUS</Text><Text style={styles.sVal}>{result.followers}</Text></View>
+                        <View style={styles.sDiv} />
+                        <View style={styles.sItem}><Text style={styles.sLabel}>DATA</Text><Text style={styles.sVal}>{result.stats}</Text></View>
+                    </View>
+                    <View style={styles.actionRow}>
+                        <TouchableOpacity style={styles.btnV} onPress={() => openLink(result)}><Text style={styles.btnT}>Visit</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.btnS} onPress={saveProfile}><Text style={styles.btnT}>Secure</Text></TouchableOpacity>
+                    </View>
+                </LinearGradient>
+            </View>
           </View>
         ) : view === 'home' ? (
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : "height"} style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
+          /* --- HOME VIEW (LOGO & UI FIXED) --- */
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : "height"} style={styles.flex1}>
+            <ScrollView contentContainerStyle={styles.homeContent}>
               
-              {}
-              <View style={styles.header}>
-                <Image source={require('./assets/logo.png')} style={styles.heroLogo} resizeMode="contain" />
-                <Text style={styles.tagline}>INSTANT INTELLIGENCE ACROSS PLATFORMS</Text>
+              {/* --- অরিজিনাল লোগো সেকশন --- */}
+              <View style={styles.logoContainer}>
+                <Image source={require('./assets/adaptive-icon.png')} style={styles.mainLogo} resizeMode="contain" />
+                <Text style={styles.subTag}>INSTANT INTELLIGENCE ACROSS PLATFORMS</Text>
               </View>
 
-              <View style={styles.lowerSection}>
-                <View style={styles.topRow}>
-                  <TouchableOpacity style={styles.miniBtn} onPress={() => setView('saved')}>
-                    <Ionicons name="bookmark" size={18} color="#0ea5e9" /><Text style={styles.miniBtnText}>Saved Profiles</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.miniBtn} onPress={() => setShowModal(true)}>
-                    <FontAwesome5 name={platform.icon} size={16} color="#0ea5e9" /><Text style={styles.miniBtnText}>{platform.name === 'None' ? 'Platform' : platform.name}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.inputCard}>
-                  <View style={styles.tabRow}>
-                    <TouchableOpacity style={[styles.tab, type === 'username' && styles.activeTab]} onPress={() => setType('username')}><Text style={[styles.tabText, type === 'username' && styles.activeTabText]}>Username</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.tab, type === 'link' && styles.activeTab]} onPress={() => setType('link')}><Text style={[styles.tabText, type === 'link' && styles.activeTabText]}>URL Link</Text></TouchableOpacity>
-                  </View>
-                  <TextInput 
-                    style={styles.mainInput} 
-                    placeholder={type === 'username' ? "Enter @username" : "Paste link here..."} 
-                    placeholderTextColor="#475569"
-                    value={input}
-                    onChangeText={setInput}
-                    textAlign="center"
-                    autoCapitalize="none"
-                    selection={input.length === 0 ? {start: 0, end: 0} : undefined}
-                  />
-                </View>
-
-                {recents.length > 0 && (
-                  <View style={styles.recentBox}>
-                    <Text style={styles.recentTitle}>RECENT SEARCHES</Text>
-                    {recents.map((item, idx) => (
-                      <View key={idx} style={styles.recentItem}>
-                        <TouchableOpacity style={{flex:1}} onPress={() => { setInput(item); handleSearch(item); }}>
-                          <Text style={{color: '#94a3b8'}}>{item}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => deleteRecent(item)}><Ionicons name="close-circle" size={18} color="#334155" /></TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <TouchableOpacity style={styles.searchBtn} onPress={() => handleSearch()}>
-                  <LinearGradient colors={['#0ea5e9', '#0284c7']} style={styles.searchGrad}>
-                    {loading ? <ActivityIndicator color="#fff" /> : <View style={{flexDirection:'row', alignItems:'center'}}><Text style={styles.searchBtnText}>Search Now</Text><Ionicons name="search" size={20} color="#fff" style={{marginLeft:10}}/></View>}
-                  </LinearGradient>
+              <View style={styles.topBtnRow}>
+                <TouchableOpacity style={styles.pill} onPress={() => setView('saved')}>
+                    <Ionicons name="bookmark" size={18} color="#0ea5e9" />
+                    <Text style={styles.pillTxt}>Saved Profiles</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pill} onPress={() => setShowModal(true)}>
+                    <Ionicons name="grid" size={18} color="#0ea5e9" />
+                    <Text style={styles.pillTxt}>{platform.name === 'None' ? 'Platform' : platform.name}</Text>
                 </TouchableOpacity>
               </View>
+
+              <View style={styles.searchBox}>
+                <View style={styles.toggleContainer}>
+                  <TouchableOpacity style={[styles.togglePill, type === 'username' && styles.activePill]} onPress={() => setType('username')}>
+                    <Text style={[styles.toggleT, type === 'username' && styles.activeT]}>Username</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.togglePill, type === 'link' && styles.activePill]} onPress={() => setType('link')}>
+                    <Text style={[styles.toggleT, type === 'link' && styles.activeT]}>URL Link</Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput 
+                  style={styles.mainInput} 
+                  placeholder={type === 'username' ? "Enter @username" : "Enter Link..."} 
+                  placeholderTextColor="#475569"
+                  value={input}
+                  onChangeText={setInput}
+                  textAlign="center"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
+                <LinearGradient colors={['#0ea5e9', '#0284c7']} style={styles.searchGrad}>
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.searchBtnTxt}>Search Now  <Ionicons name="search" size={18} color="#fff" /></Text>}
+                </LinearGradient>
+              </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
         ) : (
-          
-          <View style={styles.savedView}>
-            <TouchableOpacity onPress={() => setView('home')} style={styles.backCircleStandalone}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
-
-            <View style={styles.titleSection}>
-              <Text style={styles.title}>Saved Intelligence</Text>
-              <Text style={styles.subtitle}>{saved.length} profiles secured</Text>
+          /* --- SAVED ASSETS --- */
+          <View style={styles.flex1}>
+            <View style={styles.headerRow}>
+                <TouchableOpacity onPress={() => setView('home')} style={styles.backCircle}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
+                <Text style={styles.headerTitle}>Secured Assets</Text>
             </View>
-
-            <ScrollView style={{marginTop: 10}} showsVerticalScrollIndicator={false}>
-              {saved.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Ionicons name="cloud-offline-outline" size={50} color="#1e293b" />
-                  <Text style={{color: '#475569', marginTop: 10}}>No saved profiles yet.</Text>
-                </View>
-              ) : (
-                saved.map((item) => (
-                  <View key={item.id} style={styles.sItem}>
-                    <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', flex: 1}} onPress={() => openLink(item)}>
-                      <View style={[styles.platformIconBg, {backgroundColor: '#0ea5e915'}]}>
-                         <FontAwesome5 name={item.platformIcon} size={16} color="#0ea5e9" />
-                      </View>
-                      <View style={{marginLeft: 12}}>
-                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 15}}>{item.username}</Text>
-                        <Text style={{color: '#475569', fontSize: 10, textTransform: 'uppercase'}}>{item.platform}</Text>
-                      </View>
+            <ScrollView style={{padding: 20}}>
+                {saved.map((item) => (
+                  <View key={item.id} style={styles.saveItem}>
+                    <TouchableOpacity style={{flex: 1}} onPress={() => openLink(item)}>
+                      <Text style={{color: '#fff', fontWeight: 'bold'}}>{item.username}</Text>
+                      <Text style={{color: '#475569', fontSize: 12}}>{item.platform}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => deleteSaved(item.id)} style={styles.delBtn}>
-                      <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => {
+                        const f = saved.filter(i => i.id !== item.id);
+                        setSaved(f);
+                        AsyncStorage.setItem('saved', JSON.stringify(f));
+                    }}><Ionicons name="trash" size={20} color="#ef4444" /></TouchableOpacity>
                   </View>
-                ))
-              )}
+                ))}
             </ScrollView>
           </View>
         )}
 
+        {/* Platform Selection Modal */}
         <Modal visible={showModal} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Platform</Text>
-                <TouchableOpacity onPress={() => setShowModal(false)}><Ionicons name="close-circle" size={26} color="#475569" /></TouchableOpacity>
-              </View>
-              <FlatList 
-                data={PLATFORMS}
-                keyExtractor={(item) => item.id}
-                renderItem={({item}) => (
-                  <TouchableOpacity style={styles.pItem} onPress={() => { setPlatform(item); setShowModal(false); }}>
-                    <FontAwesome5 name={item.icon} size={18} color={item.color} style={{width: 30}} />
-                    <Text style={{color: '#fff', fontSize: 16, flex: 1}}>{item.name}</Text>
-                    {platform.id === item.id && <Ionicons name="checkmark-circle" size={20} color="#0ea5e9" />}
-                  </TouchableOpacity>
-                )}
-              />
+          <View style={styles.mOverlay}>
+            <View style={styles.mContent}>
+              <Text style={styles.mTitle}>Select Platform</Text>
+              <FlatList data={PLATFORMS} keyExtractor={i => i.id} renderItem={({item}) => (
+                <TouchableOpacity style={styles.mRow} onPress={() => { setPlatform(item); setShowModal(false); }}>
+                  <FontAwesome5 name={item.icon} size={18} color={item.color} style={{width: 35}} />
+                  <Text style={{color: '#fff', fontSize: 16}}>{item.name}</Text>
+                </TouchableOpacity>
+              )} />
+              <TouchableOpacity onPress={() => setShowModal(false)} style={{marginTop: 15, alignSelf: 'center'}}><Text style={{color: '#0ea5e9'}}>Cancel</Text></TouchableOpacity>
             </View>
           </View>
         </Modal>
-        <Text style={styles.footer}>Developed by Neurootix</Text>
+        
+        <Text style={styles.devTag}>Developed by Neurootix</Text>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -267,55 +226,57 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollInner: { flexGrow: 1, paddingHorizontal: 25, paddingTop: 40 },
-  header: { alignItems: 'center', marginBottom: 20 },
-  heroLogo: { width: width * 2.00, height: 130 },
-  tagline: { color: '#64748b', fontSize: 9, fontWeight: '800', letterSpacing: 1.2, marginTop: -10 },
-  lowerSection: { marginTop: 30 },
-  topRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  miniBtn: { flex: 1, backgroundColor: '#1e293b', padding: 16, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
-  miniBtnText: { color: '#fff', fontSize: 13, fontWeight: '700', marginLeft: 8 },
-  inputCard: { backgroundColor: '#1e293b', borderRadius: 22, padding: 10, marginBottom: 15, borderWidth: 1, borderColor: '#334155' },
-  tabRow: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 5, marginBottom: 5 },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
-  activeTab: { backgroundColor: '#0ea5e9' },
-  tabText: { color: '#475569', fontSize: 13, fontWeight: '800' },
-  activeTabText: { color: '#fff' },
-  mainInput: { color: '#fff', fontSize: 18, paddingVertical: 18, fontWeight: '600' },
-  recentBox: { marginBottom: 20 },
-  recentTitle: { color: '#475569', fontSize: 10, fontWeight: 'bold', marginBottom: 10, letterSpacing: 1 },
-  recentItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  searchBtn: { borderRadius: 20, overflow: 'hidden', marginTop: 10 },
+  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0 },
+  flex1: { flex: 1 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
+  backCircle: { width: 45, height: 45, borderRadius: 25, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  headerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginLeft: 15 },
+  homeContent: { flexGrow: 1, padding: 25, alignItems: 'center' },
+  
+  // লোগো এবং টাইটেল ডিজাইন
+  logoContainer: { alignItems: 'center', marginVertical: 30 },
+  mainLogo: { width: 600, height: 100 },
+  mainTitle: { color: '#0ea5e9', fontSize: 32, fontWeight: 'bold', marginTop: 10 },
+  subTag: { color: '#64748b', fontSize: 10, fontWeight: 'bold', letterSpacing: 0.5, marginTop: 5 },
+  
+  topBtnRow: { flexDirection: 'row', gap: 12, width: '100%', marginBottom: 20 },
+  pill: { flex: 1, backgroundColor: '#1e293b', padding: 18, borderRadius: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
+  pillTxt: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginLeft: 10 },
+  
+  searchBox: { width: '100%', backgroundColor: '#1e293b', borderRadius: 25, padding: 8, marginBottom: 20, borderWidth: 1, borderColor: '#334155' },
+  toggleContainer: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 18, padding: 5 },
+  togglePill: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 15 },
+  activePill: { backgroundColor: '#0ea5e9' },
+  toggleT: { color: '#475569', fontSize: 13, fontWeight: 'bold' },
+  activeT: { color: '#fff' },
+  mainInput: { color: '#fff', fontSize: 18, paddingVertical: 20 },
+  
+  searchBtn: { width: '100%', borderRadius: 20, overflow: 'hidden' },
   searchGrad: { padding: 20, alignItems: 'center' },
-  searchBtnText: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  searchBtnTxt: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   
-  // সেভড স্ক্রিন ফিক্স
-  savedView: { flex: 1, paddingHorizontal: 25, paddingTop: Platform.OS === 'ios' ? 30 : 50 },
-  backCircleStandalone: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1e293b', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', marginBottom: 20 },
-  titleSection: { marginBottom: 20 },
-  title: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  subtitle: { color: '#475569', fontSize: 13, marginTop: 4 },
+  cardWrapper: { flex: 1, paddingHorizontal: 25, justifyContent: 'center' },
+  resCard: { borderRadius: 30, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  avatarCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 2, borderColor: '#0ea5e9', overflow: 'hidden' },
+  imgFull: { width: '100%', height: '100%' },
+  resUser: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  pBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0ea5e915', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10, marginTop: 8 },
+  pBadgeTxt: { color: '#0ea5e9', fontSize: 12, fontWeight: 'bold', marginLeft: 8 },
+  resBio: { color: '#94a3b8', textAlign: 'center', fontSize: 14, marginVertical: 20 },
+  statGrid: { flexDirection: 'row', width: '100%', paddingVertical: 20, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#334155', marginVertical: 10 },
+  sItem: { flex: 1, alignItems: 'center' },
+  sDiv: { width: 1, height: '100%', backgroundColor: '#334155' },
+  sLabel: { color: '#475569', fontSize: 10, fontWeight: 'bold' },
+  sVal: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginTop: 5 },
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 15 },
+  btnV: { flex: 1, backgroundColor: '#0ea5e9', paddingVertical: 15, borderRadius: 15, alignItems: 'center' },
+  btnS: { flex: 1, backgroundColor: '#334155', paddingVertical: 15, borderRadius: 15, alignItems: 'center' },
+  btnT: { color: '#fff', fontWeight: 'bold' },
   
-  sItem: { backgroundColor: '#1e293b', padding: 16, borderRadius: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#334155' },
-  platformIconBg: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  delBtn: { padding: 10, backgroundColor: '#ef444408', borderRadius: 12 },
-  emptyBox: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
-  
-  previewContainer: { flex: 1, padding: 25, justifyContent: 'center' },
-  resultCard: { borderRadius: 30, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#334155', backgroundColor: '#1e293b' },
-  avatarWrap: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', marginBottom: 15, overflow: 'hidden' },
-  avatarImg: { width: '100%', height: '100%' },
-  resName: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  badgeText: { color: '#0ea5e9', fontWeight: 'bold', marginVertical: 10, fontSize: 14 },
-  resBio: { color: '#94a3b8', textAlign: 'center', fontSize: 13, lineHeight: 18 },
-  cardActions: { flexDirection: 'row', gap: 15, marginTop: 25 },
-  actionBtn: { backgroundColor: '#0ea5e9', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 15 },
-  btnText: { color: '#fff', fontWeight: 'bold' },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 30 },
-  modalContent: { backgroundColor: '#1e293b', borderRadius: 30, padding: 25 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  pItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  footer: { textAlign: 'center', color: '#334155', fontSize: 11, paddingBottom: 20 }
+  saveItem: { backgroundColor: '#1e293b', padding: 20, borderRadius: 20, flexDirection: 'row', marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  mOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 35 },
+  mContent: { backgroundColor: '#1e293b', borderRadius: 25, padding: 25 },
+  mTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  mRow: { flexDirection: 'row', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#334155', alignItems: 'center' },
+  devTag: { textAlign: 'center', color: '#334155', fontSize: 11, paddingVertical: 15 }
 });
