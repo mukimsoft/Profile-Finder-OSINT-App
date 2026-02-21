@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, View, Text, TextInput, TouchableOpacity, 
   Image, SafeAreaView, ActivityIndicator, Keyboard, 
-  ScrollView, StatusBar, Linking, Modal, FlatList, Alert, Platform, KeyboardAvoidingView 
+  ScrollView, StatusBar, Linking, Modal, FlatList, Alert, Platform, KeyboardAvoidingView
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -17,18 +17,19 @@ import * as Sharing from 'expo-sharing';
 // --- PLATFORM DATA ---
 const PLATFORMS = [
   { id: '0', name: 'None', icon: 'dot-circle', color: '#64748b', base: '' },
-  { id: '1', name: 'GitHub', icon: 'github', color: '#fff', base: 'github.com/' },
-  { id: '2', name: 'Facebook', icon: 'facebook', color: '#1877F2', base: 'facebook.com/' },
-  { id: '3', name: 'Instagram', icon: 'instagram', color: '#E4405F', base: 'instagram.com/' },
-  { id: '4', name: 'LinkedIn', icon: 'linkedin', color: '#0A66C2', base: 'linkedin.com/in/' },
-  { id: '5', name: 'Twitter', icon: 'twitter', color: '#1DA1F2', base: 'x.com/' },
-  { id: '6', name: 'YouTube', icon: 'youtube', color: '#FF0000', base: 'youtube.com/@' },
+  { id: '1', name: 'Neurootix', icon: 'shield-alt', color: '#6611b5', base: 'https://neurootix.com/' },
+  { id: '2', name: 'GitHub', icon: 'github', color: '#fff', base: 'https://github.com/' },
+  { id: '3', name: 'Facebook', icon: 'facebook', color: '#1877F2', base: 'https://facebook.com/' },
+  { id: '4', name: 'Instagram', icon: 'instagram', color: '#E4405F', base: 'https://instagram.com/' },
+  { id: '5', name: 'LinkedIn', icon: 'linkedin', color: '#0A66C2', base: 'https://linkedin.com/in/' },
+  { id: '6', name: 'Twitter', icon: 'twitter', color: '#1DA1F2', base: 'https://x.com/' },
+  { id: '7', name: 'YouTube', icon: 'youtube', color: '#FF0000', base: 'https://youtube.com/@' },
 ];
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// --- 1. SEARCH SCREEN (HOME) ---
+// --- SEARCH SCREEN ---
 function SearchHome({ navigation }) {
   const [platform, setPlatform] = useState(PLATFORMS[0]);
   const [showModal, setShowModal] = useState(false);
@@ -37,34 +38,33 @@ function SearchHome({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const pickImageAndSearch = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      Alert.alert("Permission Denied", "Gallery access required.");
-      return;
-    }
-    let result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 1 });
-    if (!result.canceled) {
-      Alert.alert("OSINT Analysis", "Search image on:", [
-        { text: "Google Lens", onPress: () => Linking.openURL(`https://www.google.com/searchbyimage?image_url=${result.assets[0].uri}`) },
-        { text: "Cancel", style: "cancel" }
-      ]);
-    }
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return Alert.alert("Permission Denied", "Gallery access required.");
+      let result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: false, quality: 1 });
+      if (!result.canceled) {
+        Alert.alert("Intelligence Scan", "Local images must be uploaded to Google Lens for full OSINT analysis.", [
+          { text: "OPEN LENS", onPress: () => Linking.openURL('https://lens.google.com/upload') },
+          { text: "CANCEL", style: "cancel" }
+        ]);
+      }
+    } catch (err) { Alert.alert("Error", "Could not process image."); }
   };
 
   const startAnalysis = async () => {
-    if (!input) return Alert.alert("Wait", `Please enter a ${type}.`);
-    setLoading(true);
-    Keyboard.dismiss();
-
+    if (!input) return Alert.alert("Wait", `Please enter text.`);
+    setLoading(true); Keyboard.dismiss();
     const cleanInput = input.trim();
+    
     let resultData = {
-      username: cleanInput,
+      id: Date.now().toString(),
+      username: cleanInput, 
       platform: platform.name,
       platformIcon: platform.icon,
       baseLink: platform.base,
       type: type,
       avatar: null,
-      bio: `Deep scanning intelligence for ${type}: ${cleanInput}`,
+      bio: `OSINT scanning active for ${platform.name} entry.`,
       followers: 'Checking...',
       stats: 'Active',
       scanDate: new Date().toLocaleString()
@@ -77,31 +77,24 @@ function SearchHome({ navigation }) {
         if (data.login) {
           resultData.avatar = data.avatar_url;
           resultData.bio = data.bio || "No public bio found.";
-          resultData.followers = data.followers + " Followers";
-          resultData.stats = data.public_repos + " Repos";
+          resultData.followers = data.followers;
+          resultData.stats = data.public_repos;
         }
       } catch (e) { console.log(e); }
+    } else {
+        // Non-GitHub Platforms logic
+        resultData.followers = "Engagement Data";
+        resultData.stats = type.toUpperCase();
+        resultData.bio = `Analysis of ${cleanInput} on ${platform.name} is complete.`;
     }
-
-    if (type === 'email' || type === 'phone') {
-      resultData.platform = "Global Database";
-      resultData.platformIcon = type === 'email' ? "envelope" : "phone-alt";
-    }
-
-    setTimeout(() => {
-      setLoading(false);
-      navigation.navigate('Details', { data: resultData });
-    }, 1200);
+    
+    setTimeout(() => { setLoading(false); navigation.navigate('Details', { data: resultData }); }, 1000);
   };
 
   return (
     <LinearGradient colors={['#020617', '#0f172a']} style={styles.full}>
       <SafeAreaView style={styles.flex1}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : "height"} 
-          style={styles.flex1}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex1}>
           <ScrollView contentContainerStyle={styles.homeScroll} keyboardShouldPersistTaps="handled">
             <View style={styles.mainContainer}>
               <View style={styles.heroBox}>
@@ -110,45 +103,39 @@ function SearchHome({ navigation }) {
               </View>
 
               <View style={styles.quickActions}>
-                  <TouchableOpacity style={styles.actionPill} onPress={pickImageAndSearch}>
-                      <Ionicons name="camera" size={18} color="#0ea5e9" />
-                      <Text style={styles.pillTxt}>Image OSINT</Text>
+                  <TouchableOpacity style={[styles.actionPill, {flex: 1}]} onPress={pickImageAndSearch}>
+                      <Ionicons name="camera" size={16} color="#0ea5e9" />
+                      <Text style={[styles.pillTxt, {fontSize: 11}]}>OSINT</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionPill} onPress={() => setShowModal(true)}>
-                      <FontAwesome5 name={platform.icon} size={16} color="#0ea5e9" />
-                      <Text style={styles.pillTxt}>{platform.name}</Text>
+                  <TouchableOpacity style={[styles.actionPill, {flex: 1}]} onPress={() => setShowModal(true)}>
+                      <FontAwesome5 name={platform.icon} size={14} color={platform.color} />
+                      <Text style={[styles.pillTxt, {fontSize: 11}]}>{platform.name}</Text>
                   </TouchableOpacity>
               </View>
 
               <View style={styles.searchContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeSwitcher}>
                   {['username', 'email', 'phone', 'link'].map((t) => (
-                    <TouchableOpacity 
-                      key={t} 
-                      style={[styles.typeBtn, type === t && styles.typeActive]} 
-                      onPress={() => { setType(t); setInput(''); }}
-                    >
-                      <Text style={[styles.typeTxt, type === t && styles.typeActiveTxt]}>
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </Text>
+                    <TouchableOpacity key={t} style={[styles.typeBtn, type === t && styles.typeActive]} onPress={() => { setType(t); setInput(''); }}>
+                      <Text style={[styles.typeTxt, type === t && styles.typeActiveTxt]}>{t.charAt(0).toUpperCase() + t.slice(1)}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
                 <TextInput 
-                  style={styles.mainInput}
-                  placeholder={`Enter ${type}...`}
-                  placeholderTextColor="#475569"
-                  value={input}
-                  onChangeText={setInput}
-                  textAlign="center"
-                  autoCapitalize="none"
-                  keyboardType={type === 'phone' ? 'phone-pad' : type === 'email' ? 'email-address' : 'default'}
+                  style={styles.mainInput} 
+                  placeholder={`Paste text or enter ${type}...`} 
+                  placeholderTextColor="#475569" 
+                  value={input} 
+                  onChangeText={setInput} 
+                  textAlign="center" 
+                  autoCapitalize="none" 
+                  multiline
                 />
               </View>
 
               <TouchableOpacity style={styles.mainBtn} onPress={startAnalysis}>
                 <LinearGradient colors={['#0ea5e9', '#0284c7']} style={styles.mainBtnGrad}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainBtnTxt}>Run Analysis</Text>}
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainBtnTxt}>Analysis</Text>}
                 </LinearGradient>
               </TouchableOpacity>
               <Text style={styles.footerBrand}>Developed by Neurootix</Text>
@@ -175,56 +162,68 @@ function SearchHome({ navigation }) {
   );
 }
 
-// --- 2. DETAILS SCREEN ---
+// --- DETAILS SCREEN ---
 function DetailsScreen({ route, navigation }) {
   const { data } = route.params;
 
-  const handleVisit = () => {
-    let url = "";
-    if (data.type === 'email') url = `mailto:${data.username}`;
-    else if (data.type === 'phone') url = `tel:${data.username}`;
-    else url = data.type === 'link' ? (data.username.startsWith('http') ? data.username : `https://${data.username}`) : `https://${data.baseLink}${data.username}`;
-    Linking.openURL(url).catch(() => Alert.alert("Error", "Action not supported."));
+  const openProfileLink = () => {
+    if (data.baseLink) {
+        Linking.openURL(`${data.baseLink}${data.username}`);
+    } else {
+        Alert.alert("Link Unavailable", "This data has no associated platform link.");
+    }
   };
 
-  const exportPDF = async () => {
+  const saveProfile = async () => {
+    try {
+      const existing = await AsyncStorage.getItem('saved_profiles');
+      let arr = existing ? JSON.parse(existing) : [];
+      arr.unshift(data);
+      await AsyncStorage.setItem('saved_profiles', JSON.stringify(arr));
+      Alert.alert("Saved", "Profile saved to vault.");
+    } catch (e) { Alert.alert("Error", "Could not save profile."); }
+  };
+
+  // --- DETAILS SCREEN PDF LOGIC UPDATE ---
+const exportPDF = async () => {
+    // Conditional content toiry kora hocche
+    const bioContent = data.bio ? `<div class="info-row"><b>BIO:</b> ${data.bio}</div>` : '';
+    const statsContent = data.platform === 'GitHub' ? `
+      <div class="info-row"><b>REPOSITORIES:</b> ${data.stats}</div>
+      <div class="info-row"><b>FOLLOWERS:</b> ${data.followers}</div>
+    ` : `
+      <div class="info-row"><b>STATUS:</b> ${data.followers}</div>
+      <div class="info-row"><b>DATA TYPE:</b> ${data.stats}</div>
+    `;
+
     const htmlContent = `
       <html>
         <head>
           <style>
-            body { font-family: 'Helvetica', sans-serif; padding: 40px; color: #1e293b; background-color: #f8fafc; }
-            .header { border-bottom: 3px solid #0ea5e9; padding-bottom: 10px; margin-bottom: 30px; }
-            .title { color: #0ea5e9; font-size: 28px; font-weight: bold; margin: 0; }
-            .subtitle { color: #64748b; font-size: 14px; }
-            .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-            .label { font-weight: bold; color: #0ea5e9; font-size: 12px; text-transform: uppercase; margin-top: 20px; }
-            .value { font-size: 18px; color: #0f172a; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
-            .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #94a3b8; }
+            body { font-family: 'Helvetica', sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.6; }
+            .header { border-bottom: 3px solid #0ea5e9; padding-bottom: 15px; margin-bottom: 30px; }
+            .platform-title { font-size: 24px; font-weight: bold; color: #0ea5e9; text-transform: uppercase; }
+            .date { font-size: 12px; color: #64748b; margin-top: 5px; }
+            .main-id { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #334155; }
+            .content-area { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }
+            .info-row { margin-bottom: 10px; border-left: 3px solid #e2e8f0; padding-left: 10px; }
+            .footer { position: fixed; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #eee; padding-top: 10px; }
           </style>
         </head>
         <body>
           <div class="header">
-            <h1 class="title">OSINT INTELLIGENCE REPORT</h1>
-            <p class="subtitle">Generated by Neurootix Interface • ${data.scanDate}</p>
+            <div class="platform-title">${data.platform} Intelligence Report</div>
+            <div class="date">REPORT GENERATED: ${data.scanDate}</div>
           </div>
-          <div class="card">
-            <div class="label">Target Identity</div>
-            <div class="value">${data.username}</div>
-            
-            <div class="label">Platform / Source</div>
-            <div class="value">${data.platform} (${data.type})</div>
-            
-            <div class="label">Status / Engagement</div>
-            <div class="value">${data.followers}</div>
-            
-            <div class="label">Data Points</div>
-            <div class="value">${data.stats}</div>
-            
-            <div class="label">Intelligence Bio</div>
-            <div class="value">${data.bio}</div>
+
+          <div class="content-area">
+            <div class="main-id">TARGET: ${data.username}</div>
+            ${bioContent}
+            ${statsContent}
           </div>
+
           <div class="footer">
-            CONFIDENTIAL REPORT • NEUROOTIX OSINT SYSTEM v3.0
+            CONFIDENTIAL NEUROOTIX OSINT SYSTEM v3.0 [cite: 8, 20]
           </div>
         </body>
       </html>
@@ -232,20 +231,10 @@ function DetailsScreen({ route, navigation }) {
 
     try {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-    } catch (error) {
-      Alert.alert("Export Error", "Could not generate PDF report.");
+      await Sharing.shareAsync(uri);
+    } catch (e) {
+      Alert.alert("Error", "Could not generate full report.");
     }
-  };
-
-  const secure = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('saved_profiles');
-      let arr = saved ? JSON.parse(saved) : [];
-      arr.push({ ...data, id: Date.now().toString() });
-      await AsyncStorage.setItem('saved_profiles', JSON.stringify(arr));
-      Alert.alert("Secured", "Added to intelligence vault.");
-    } catch (e) { Alert.alert("Error", "Failed to save."); }
   };
 
   return (
@@ -253,73 +242,87 @@ function DetailsScreen({ route, navigation }) {
       <SafeAreaView style={[styles.flex1, styles.safeTop]}>
         <View style={styles.detailsHeader}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.circleBack}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
-          <TouchableOpacity onPress={exportPDF} style={styles.exportBtn}>
-            <Ionicons name="document-text" size={20} color="#0ea5e9" />
-            <Text style={styles.exportTxt}>Export Report</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.resultCenter}>
-          <View style={styles.card}>
-            <View style={styles.avatar}>
-              {data.avatar ? <Image source={{uri: data.avatar}} style={styles.imgFull} /> : <FontAwesome5 name={data.platformIcon || 'user-secret'} size={40} color="#0ea5e9" />}
-            </View>
-            <Text style={styles.resName}>{data.username}</Text>
-            <View style={styles.resBadge}><Text style={styles.resBadgeTxt}>{data.platform} Scan</Text></View>
-            <Text style={styles.resBio}>{data.bio}</Text>
-            <View style={styles.resStats}>
-               <View style={styles.sItem}><Text style={styles.sLab}>STATUS</Text><Text style={styles.sVal}>{data.followers}</Text></View>
-               <View style={styles.sItem}><Text style={styles.sLab}>DATA</Text><Text style={styles.sVal}>{data.stats}</Text></View>
-            </View>
-            <View style={styles.resBtns}>
-                <TouchableOpacity style={styles.vBtn} onPress={handleVisit}><Text style={styles.btnT}>{data.type === 'phone' ? 'Call' : data.type === 'email' ? 'Email' : 'Visit'}</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.sBtn} onPress={secure}><Text style={styles.btnT}>Secure</Text></TouchableOpacity>
-            </View>
+          <View style={{flexDirection:'row', gap:10}}>
+            <TouchableOpacity onPress={saveProfile} style={styles.exportBtn}>
+              <Ionicons name="bookmark" size={20} color="#10b981" />
+              <Text style={[styles.exportTxt,{color:'#10b981'}]}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={exportPDF} style={styles.exportBtn}>
+              <Ionicons name="share-social" size={20} color="#0ea5e9" />
+              <Text style={styles.exportTxt}>Export</Text>
+            </TouchableOpacity>
           </View>
         </View>
+
+        <ScrollView contentContainerStyle={{paddingBottom: 40}}>
+          <View style={styles.resultCenter}>
+            <View style={styles.card}>
+              <View style={styles.avatar}>
+                {data.avatar ? <Image source={{uri: data.avatar}} style={styles.imgFull} /> : <FontAwesome5 name={data.platformIcon || 'user'} size={40} color="#0ea5e9" />}
+              </View>
+              <Text style={styles.resName}>{data.username}</Text>
+              <View style={styles.resBadge}><Text style={styles.resBadgeTxt}>{data.platform}</Text></View>
+              <Text style={styles.resBio}>{data.bio}</Text>
+              
+              <View style={styles.resStats}>
+                <View style={styles.sItem}>
+                  <Text style={styles.sLab}>{data.platform === 'GitHub' ? 'FOLLOWERS' : 'STATUS'}</Text>
+                  <Text style={styles.sVal}>{data.followers}</Text>
+                </View>
+                <View style={styles.sItem}>
+                  <Text style={styles.sLab}>{data.platform === 'GitHub' ? 'REPOSITORIES' : 'DATA POINTS'}</Text>
+                  <Text style={styles.sVal}>{data.stats}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.resBtns}>
+                  <TouchableOpacity style={[styles.vBtn, {backgroundColor: '#334155'}]} onPress={() => navigation.goBack()}><Text style={styles.btnT}>Back</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.sBtn, {backgroundColor: '#0ea5e9'}]} onPress={openProfileLink}><Text style={styles.btnT}>Go Profile</Text></TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );
 }
 
-// --- 3. VAULT SCREEN ---
+// --- VAULT ---
 function VaultScreen({ navigation }) {
   const [items, setItems] = useState([]);
-  const loadVault = async () => {
-    const d = await AsyncStorage.getItem('saved_profiles');
-    if (d) setItems(JSON.parse(d));
+  const loadVault = async () => { 
+    const d = await AsyncStorage.getItem('saved_profiles'); 
+    if (d) setItems(JSON.parse(d)); 
   };
   const deleteItem = async (id) => {
-    Alert.alert("Delete", "Remove this profile?", [
+    Alert.alert("Delete Asset", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
+      { text: "Delete", style: 'destructive', onPress: async () => {
         const filtered = items.filter(i => i.id !== id);
         setItems(filtered);
         await AsyncStorage.setItem('saved_profiles', JSON.stringify(filtered));
       }}
     ]);
   };
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadVault);
-    return unsubscribe;
-  }, [navigation]);
-
+  useEffect(() => { return navigation.addListener('focus', loadVault); }, [navigation]);
   return (
     <LinearGradient colors={['#020617', '#0f172a']} style={styles.full}>
       <SafeAreaView style={[styles.flex1, styles.safeTop]}>
         <Text style={styles.vaultTitle}>Secured Assets</Text>
         <FlatList data={items} keyExtractor={item => item.id} renderItem={({item}) => (
           <View style={styles.vCard}>
-             <View style={{flex: 1}}><Text style={{color:'#fff', fontWeight:'bold'}}>@{item.username}</Text><Text style={{color:'#0ea5e9', fontSize:12}}>{item.platform}</Text></View>
-             <TouchableOpacity onPress={() => deleteItem(item.id)} style={styles.delBtn}><Ionicons name="trash-outline" size={18} color="#ef4444" /></TouchableOpacity>
+             <View style={{flex: 1}}>
+                <Text style={{color:'#fff', fontWeight:'bold', fontSize: 14}}>@{item.username}</Text>
+                <Text style={{color: '#0ea5e9', fontSize:11, marginTop: 2}}>{item.platform}</Text>
+             </View>
+             <TouchableOpacity onPress={() => deleteItem(item.id)} style={{padding: 8}}><Ionicons name="trash-outline" size={20} color="#ef4444" /></TouchableOpacity>
           </View>
-        )} ListEmptyComponent={<Text style={styles.emptyTxt}>No assets secured.</Text>} />
+        )} ListEmptyComponent={<Text style={styles.emptyTxt}>No assets secured yet.</Text>} />
       </SafeAreaView>
     </LinearGradient>
   );
 }
 
-// --- APP SETUP ---
 function SearchStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -350,21 +353,21 @@ export default function App() {
 const styles = StyleSheet.create({
   full: { flex: 1 }, flex1: { flex: 1 },
   safeTop: { paddingTop: Platform.OS === 'android' ? 45 : 10 },
-  homeScroll: { flexGrow: 1, justifyContent: 'center' },
-  mainContainer: { paddingHorizontal: 25, paddingVertical: 20 },
-  heroBox: { alignItems: 'center', marginBottom: 20 },
-  logoImg: { width: 400, height: 180 },
-  subText: { color: '#0ea5e9', fontSize: 10, fontWeight: 'bold', letterSpacing: 1.5, marginTop: -5 },
-  quickActions: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  actionPill: { flex:1, backgroundColor: '#1e293b', padding: 12, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
-  pillTxt: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
+  homeScroll: { flexGrow: 1, justifyContent: 'flex-start' }, 
+  mainContainer: { paddingHorizontal: 25, paddingTop: 30, paddingBottom: 20 }, 
+  heroBox: { alignItems: 'center', marginBottom: 35, marginTop: 10 }, 
+  logoImg: { width: '180%', height: 100 }, 
+  subText: { color: '#0ea5e9', fontSize: 10, fontWeight: 'bold', letterSpacing: 1.5, marginTop: 5 },
+  quickActions: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  actionPill: { backgroundColor: '#1e293b', padding: 12, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
+  pillTxt: { color: '#fff', fontWeight: 'bold', marginLeft: 6 },
   searchContainer: { width: '100%', backgroundColor: '#1e293b', borderRadius: 25, padding: 10, borderWidth: 1, borderColor: '#334155' },
   typeSwitcher: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 18, padding: 5, marginBottom: 5 },
   typeBtn: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 15, marginRight: 5 },
   typeActive: { backgroundColor: '#0ea5e9' },
   typeTxt: { color: '#475569', fontSize: 12, fontWeight: 'bold' },
   typeActiveTxt: { color: '#fff' },
-  mainInput: { color: '#fff', fontSize: 18, paddingVertical: 15 },
+  mainInput: { color: '#fff', fontSize: 16, paddingVertical: 15, minHeight: 60 },
   mainBtn: { width: '100%', borderRadius: 25, overflow: 'hidden', marginTop: 25 },
   mainBtnGrad: { padding: 18, alignItems: 'center' },
   mainBtnTxt: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
@@ -378,7 +381,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#1e293b', borderRadius: 30, padding: 25, alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 2, borderColor: '#0ea5e9', overflow:'hidden' },
   imgFull: { width: '100%', height: '100%' },
-  resName: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  resName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   resBadge: { backgroundColor: '#0ea5e915', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, marginTop: 8 },
   resBadgeTxt: { color: '#0ea5e9', fontSize: 10, fontWeight: 'bold' },
   resBio: { color: '#94a3b8', textAlign: 'center', fontSize: 13, marginVertical: 15 },
@@ -391,8 +394,7 @@ const styles = StyleSheet.create({
   sBtn: { flex: 1, backgroundColor: '#334155', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   btnT: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   vaultTitle: { color: '#fff', fontSize: 28, fontWeight: 'bold', paddingHorizontal: 25, marginTop: 10 },
-  vCard: { backgroundColor: '#1e293b', marginVertical: 8, padding: 20, borderRadius: 20, marginHorizontal: 25, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  delBtn: { backgroundColor: '#ef444415', padding: 8, borderRadius: 10 },
+  vCard: { backgroundColor: '#1e293b', marginVertical: 8, padding: 18, borderRadius: 20, marginHorizontal: 25, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   emptyTxt: { color:'#475569', textAlign:'center', marginTop: 50 },
   mOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   mBox: { backgroundColor: '#1e293b', borderRadius: 20, padding: 20, width: '80%' },

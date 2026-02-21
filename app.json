@@ -8,13 +8,14 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png", 
       "resizeMode": "contain",
       "backgroundColor": "#020617"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mukim.profilefinder"
+      "bundleIdentifier": "com.mukim.profilefinder",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
