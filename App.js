@@ -56,21 +56,24 @@ function SearchHome({ navigation }) {
     setLoading(true); Keyboard.dismiss();
     const cleanInput = input.trim();
     
+    // Link detection logic
+    const isFullLink = cleanInput.startsWith('http') || cleanInput.startsWith('www');
+    
     let resultData = {
       id: Date.now().toString(),
       username: cleanInput, 
       platform: platform.name,
       platformIcon: platform.icon,
-      baseLink: platform.base,
+      baseLink: isFullLink ? "" : platform.base, // Link hole baseLink empty thakbe
       type: type,
       avatar: null,
-      bio: `OSINT scanning active for ${platform.name} entry.`,
-      followers: 'Checking...',
-      stats: 'Active',
+      bio: isFullLink ? `Full link analysis for ${platform.name} source.` : `OSINT scanning active for ${platform.name} entry.`,
+      followers: isFullLink ? 'Source Verified' : 'Checking...',
+      stats: isFullLink ? 'EXTERNAL LINK' : 'Active',
       scanDate: new Date().toLocaleString()
     };
 
-    if (platform.name === 'GitHub' && type === 'username') {
+    if (platform.name === 'GitHub' && type === 'username' && !isFullLink) {
       try {
         const response = await fetch(`https://api.github.com/users/${cleanInput}`);
         const data = await response.json();
@@ -81,8 +84,7 @@ function SearchHome({ navigation }) {
           resultData.stats = data.public_repos;
         }
       } catch (e) { console.log(e); }
-    } else {
-        // Non-GitHub Platforms logic
+    } else if (!isFullLink) {
         resultData.followers = "Engagement Data";
         resultData.stats = type.toUpperCase();
         resultData.bio = `Analysis of ${cleanInput} on ${platform.name} is complete.`;
@@ -167,8 +169,14 @@ function DetailsScreen({ route, navigation }) {
   const { data } = route.params;
 
   const openProfileLink = () => {
-    if (data.baseLink) {
-        Linking.openURL(`${data.baseLink}${data.username}`);
+    const target = data.username.trim();
+    // Jodi sora sori link dewa hoy
+    if (target.startsWith('http') || target.startsWith('www')) {
+        const fullUrl = target.startsWith('www') ? `https://${target}` : target;
+        Linking.openURL(fullUrl).catch(() => Alert.alert("Error", "Invalid Link"));
+    } else if (data.baseLink) {
+        // Jodi sudhu username hoy
+        Linking.openURL(`${data.baseLink}${target}`).catch(() => Alert.alert("Error", "Could not open profile"));
     } else {
         Alert.alert("Link Unavailable", "This data has no associated platform link.");
     }
@@ -184,9 +192,7 @@ function DetailsScreen({ route, navigation }) {
     } catch (e) { Alert.alert("Error", "Could not save profile."); }
   };
 
-  // --- DETAILS SCREEN PDF LOGIC UPDATE ---
 const exportPDF = async () => {
-    // Conditional content toiry kora hocche
     const bioContent = data.bio ? `<div class="info-row"><b>BIO:</b> ${data.bio}</div>` : '';
     const statsContent = data.platform === 'GitHub' ? `
       <div class="info-row"><b>REPOSITORIES:</b> ${data.stats}</div>
@@ -204,7 +210,7 @@ const exportPDF = async () => {
             .header { border-bottom: 3px solid #0ea5e9; padding-bottom: 15px; margin-bottom: 30px; }
             .platform-title { font-size: 24px; font-weight: bold; color: #0ea5e9; text-transform: uppercase; }
             .date { font-size: 12px; color: #64748b; margin-top: 5px; }
-            .main-id { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #334155; }
+            .main-id { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #334155; word-wrap: break-word; }
             .content-area { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }
             .info-row { margin-bottom: 10px; border-left: 3px solid #e2e8f0; padding-left: 10px; }
             .footer { position: fixed; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #eee; padding-top: 10px; }
@@ -215,16 +221,12 @@ const exportPDF = async () => {
             <div class="platform-title">${data.platform} Intelligence Report</div>
             <div class="date">REPORT GENERATED: ${data.scanDate}</div>
           </div>
-
           <div class="content-area">
             <div class="main-id">TARGET: ${data.username}</div>
             ${bioContent}
             ${statsContent}
           </div>
-
-          <div class="footer">
-            CONFIDENTIAL NEUROOTIX OSINT SYSTEM v3.0 [cite: 8, 20]
-          </div>
+          <div class="footer">CONFIDENTIAL NEUROOTIX OSINT SYSTEM v3.0</div>
         </body>
       </html>
     `;
