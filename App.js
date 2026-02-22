@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 
 // --- PLATFORM DATA ---
 const PLATFORMS = [
@@ -37,6 +38,47 @@ function SearchHome({ navigation }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const handleOcrScan = async () => {
+    try {
+      const { status: camStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: libStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (camStatus !== 'granted' || libStatus !== 'granted') {
+        return Alert.alert("Permission Required", "Camera and Gallery access are needed for OCR scanning.");
+      }
+
+      Alert.alert("Select Source", "Choose an image to extract text", [
+        { text: "Camera", onPress: () => performOcr('camera') },
+        { text: "Gallery", onPress: () => performOcr('library') },
+        { text: "Cancel", style: "cancel" }
+      ]);
+    } catch (err) { Alert.alert("Error", "OCR initialization failed."); }
+  };
+
+  const performOcr = async (source) => {
+    let result;
+    if (source === 'camera') {
+      result = await ImagePicker.launchCameraAsync({ quality: 1 });
+    } else {
+      result = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
+    }
+
+    if (!result.canceled) {
+      setLoading(true);
+      try {
+        const response = await TextRecognition.recognize(result.assets[0].uri);
+        if (response && response.text) {
+          setInput(response.text.trim());
+          Alert.alert("Success", "Text extracted successfully.");
+        } else {
+          Alert.alert("OCR Result", "No readable text found.");
+        }
+      } catch (e) {
+        Alert.alert("ML Kit Error", "OCR processing is only supported on real devices with a Development Build. It won't work in Expo Go.");
+      } finally { setLoading(false); }
+    }
+  };
+
   const pickImageAndSearch = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -55,16 +97,16 @@ function SearchHome({ navigation }) {
     if (!input) return Alert.alert("Wait", `Please enter text.`);
     setLoading(true); Keyboard.dismiss();
     const cleanInput = input.trim();
-    
-    // Link detection logic
     const isFullLink = cleanInput.startsWith('http') || cleanInput.startsWith('www');
     
+    const uniqueId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+
     let resultData = {
-      id: Date.now().toString(),
+      id: uniqueId,
       username: cleanInput, 
       platform: platform.name,
       platformIcon: platform.icon,
-      baseLink: isFullLink ? "" : platform.base, // Link hole baseLink empty thakbe
+      baseLink: isFullLink ? "" : platform.base,
       type: type,
       avatar: null,
       bio: isFullLink ? `Full link analysis for ${platform.name} source.` : `OSINT scanning active for ${platform.name} entry.`,
@@ -96,19 +138,27 @@ function SearchHome({ navigation }) {
   return (
     <LinearGradient colors={['#020617', '#0f172a']} style={styles.full}>
       <SafeAreaView style={styles.flex1}>
+        {/* লোগো অংশ ফিক্সড রাখার জন্য ScrollView এর বাইরে রাখা হয়েছে */}
+        <View style={styles.heroBoxFixed}>
+          <Image source={require('./assets/adaptive-icon.png')} style={styles.logoImg} resizeMode="contain" />
+          <Text style={styles.subText}>INSTANT INTELLIGENCE INTERFACE</Text>
+        </View>
+
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex1}>
           <ScrollView contentContainerStyle={styles.homeScroll} keyboardShouldPersistTaps="handled">
             <View style={styles.mainContainer}>
-              <View style={styles.heroBox}>
-                <Image source={require('./assets/adaptive-icon.png')} style={styles.logoImg} resizeMode="contain" />
-                <Text style={styles.subText}>INSTANT INTELLIGENCE INTERFACE</Text>
-              </View>
-
+              
               <View style={styles.quickActions}>
                   <TouchableOpacity style={[styles.actionPill, {flex: 1}]} onPress={pickImageAndSearch}>
                       <Ionicons name="camera" size={16} color="#0ea5e9" />
                       <Text style={[styles.pillTxt, {fontSize: 11}]}>OSINT</Text>
                   </TouchableOpacity>
+                  
+                  <TouchableOpacity style={[styles.actionPill, {flex: 1, borderColor: '#10b981'}]} onPress={handleOcrScan}>
+                      <Ionicons name="scan-outline" size={16} color="#10b981" />
+                      <Text style={[styles.pillTxt, {fontSize: 11, color: '#10b981'}]}>SCAN</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity style={[styles.actionPill, {flex: 1}]} onPress={() => setShowModal(true)}>
                       <FontAwesome5 name={platform.icon} size={14} color={platform.color} />
                       <Text style={[styles.pillTxt, {fontSize: 11}]}>{platform.name}</Text>
@@ -170,12 +220,21 @@ function DetailsScreen({ route, navigation }) {
 
   const openProfileLink = () => {
     const target = data.username.trim();
-    // Jodi sora sori link dewa hoy
+    
+    if (data.type === 'email') {
+      Linking.openURL(`mailto:${target}`).catch(() => Alert.alert("Error", "Mail app not found"));
+      return;
+    }
+    
+    if (data.type === 'phone') {
+      Linking.openURL(`tel:${target}`).catch(() => Alert.alert("Error", "Dialer not found"));
+      return;
+    }
+
     if (target.startsWith('http') || target.startsWith('www')) {
         const fullUrl = target.startsWith('www') ? `https://${target}` : target;
         Linking.openURL(fullUrl).catch(() => Alert.alert("Error", "Invalid Link"));
     } else if (data.baseLink) {
-        // Jodi sudhu username hoy
         Linking.openURL(`${data.baseLink}${target}`).catch(() => Alert.alert("Error", "Could not open profile"));
     } else {
         Alert.alert("Link Unavailable", "This data has no associated platform link.");
@@ -186,6 +245,12 @@ function DetailsScreen({ route, navigation }) {
     try {
       const existing = await AsyncStorage.getItem('saved_profiles');
       let arr = existing ? JSON.parse(existing) : [];
+      
+      const exists = arr.some(item => item.id === data.id);
+      if(exists) {
+          data.id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+      }
+
       arr.unshift(data);
       await AsyncStorage.setItem('saved_profiles', JSON.stringify(arr));
       Alert.alert("Saved", "Profile saved to vault.");
@@ -279,7 +344,11 @@ const exportPDF = async () => {
               
               <View style={styles.resBtns}>
                   <TouchableOpacity style={[styles.vBtn, {backgroundColor: '#334155'}]} onPress={() => navigation.goBack()}><Text style={styles.btnT}>Back</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.sBtn, {backgroundColor: '#0ea5e9'}]} onPress={openProfileLink}><Text style={styles.btnT}>Go Profile</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.sBtn, {backgroundColor: '#0ea5e9'}]} onPress={openProfileLink}>
+                    <Text style={styles.btnT}>
+                      {data.type === 'email' ? 'Send Mail' : data.type === 'phone' ? 'Call Now' : 'Go Profile'}
+                    </Text>
+                  </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -292,10 +361,12 @@ const exportPDF = async () => {
 // --- VAULT ---
 function VaultScreen({ navigation }) {
   const [items, setItems] = useState([]);
+  
   const loadVault = async () => { 
     const d = await AsyncStorage.getItem('saved_profiles'); 
     if (d) setItems(JSON.parse(d)); 
   };
+
   const deleteItem = async (id) => {
     Alert.alert("Delete Asset", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -306,12 +377,37 @@ function VaultScreen({ navigation }) {
       }}
     ]);
   };
+
+  const deleteAll = async () => {
+    if (items.length === 0) return;
+    Alert.alert("Clear Vault", "Do you want to delete all secured assets?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Clear All", style: 'destructive', onPress: async () => {
+        setItems([]);
+        await AsyncStorage.removeItem('saved_profiles');
+      }}
+    ]);
+  };
+
   useEffect(() => { return navigation.addListener('focus', loadVault); }, [navigation]);
+
   return (
     <LinearGradient colors={['#020617', '#0f172a']} style={styles.full}>
       <SafeAreaView style={[styles.flex1, styles.safeTop]}>
-        <Text style={styles.vaultTitle}>Secured Assets</Text>
-        <FlatList data={items} keyExtractor={item => item.id} renderItem={({item}) => (
+        <View style={styles.vaultHeader}>
+          <Text style={styles.vaultTitle}>Secured Assets</Text>
+          {items.length > 0 && (
+            <TouchableOpacity onPress={deleteAll} style={styles.deleteAllBtn}>
+              <Ionicons name="trash-bin-outline" size={18} color="#ef4444" />
+              <Text style={styles.deleteAllTxt}>Delete All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <FlatList 
+          data={items} 
+          keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()} 
+          renderItem={({item}) => (
           <View style={styles.vCard}>
              <View style={{flex: 1}}>
                 <Text style={{color:'#fff', fontWeight:'bold', fontSize: 14}}>@{item.username}</Text>
@@ -356,10 +452,10 @@ const styles = StyleSheet.create({
   full: { flex: 1 }, flex1: { flex: 1 },
   safeTop: { paddingTop: Platform.OS === 'android' ? 45 : 10 },
   homeScroll: { flexGrow: 1, justifyContent: 'flex-start' }, 
-  mainContainer: { paddingHorizontal: 25, paddingTop: 30, paddingBottom: 20 }, 
-  heroBox: { alignItems: 'center', marginBottom: 35, marginTop: 10 }, 
-  logoImg: { width: '180%', height: 100 }, 
-  subText: { color: '#0ea5e9', fontSize: 10, fontWeight: 'bold', letterSpacing: 1.5, marginTop: 5 },
+  mainContainer: { paddingHorizontal: 25, paddingTop: 10, paddingBottom: 20 }, 
+  heroBoxFixed: { alignItems: 'center', marginBottom: 15, marginTop: 20, width: '100%' }, 
+  logoImg: { width: '180%', height: 150 }, 
+  subText: { color: '#0ea5e9', fontSize: 10, fontWeight: 'bold', letterSpacing: 1.5, marginTop: -5 },
   quickActions: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   actionPill: { backgroundColor: '#1e293b', padding: 12, borderRadius: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
   pillTxt: { color: '#fff', fontWeight: 'bold', marginLeft: 6 },
@@ -395,7 +491,10 @@ const styles = StyleSheet.create({
   vBtn: { flex: 1, backgroundColor: '#0ea5e9', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   sBtn: { flex: 1, backgroundColor: '#334155', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   btnT: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  vaultTitle: { color: '#fff', fontSize: 28, fontWeight: 'bold', paddingHorizontal: 25, marginTop: 10 },
+  vaultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, marginTop: 10, marginBottom: 10 },
+  vaultTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  deleteAllBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef444420', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: '#ef444450' },
+  deleteAllTxt: { color: '#ef4444', fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
   vCard: { backgroundColor: '#1e293b', marginVertical: 8, padding: 18, borderRadius: 20, marginHorizontal: 25, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   emptyTxt: { color:'#475569', textAlign:'center', marginTop: 50 },
   mOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
